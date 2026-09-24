@@ -11,6 +11,18 @@ Open `index.html` in a browser. It is self-contained apart from Google Fonts and
 
 Controls: mouse wheel anywhere moves the carousel, the arrow buttons (or ← →) step and glide when held, `R` toggles textbook / real-world charts on the Trend Patterns page. Search is loose: it matches names, descriptions and alternative names, and tolerates small typos.
 
+## Building and publishing
+
+`index.html` in the project root is the source page. The published site is whatever ends up in `public/`.
+
+```
+npm run build
+```
+
+This runs `scripts/build.mjs`, which currently just copies `index.html` into `public/`. Any future build step (bundling, minifying, generating the page from the CSVs) belongs in that script. `public/` is build output and is not committed.
+
+Publishing is automatic: `.github/workflows/pages.yml` runs `npm run build` on every push to `main` and deploys only `public/` to GitHub Pages. In the repo's **Settings > Pages**, set **Source** to **GitHub Actions**.
+
 ## Data
 
 - `data/candlestick-patterns.csv`: `pattern, candles, description`. Candles are `open,high,low,close` groups separated by ` | `.

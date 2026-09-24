@@ -1,0 +1,10 @@
+{
+  "name": "chart-pattern-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Candlestick and chart pattern gallery built with TradingView Lightweight Charts.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  }
+}
