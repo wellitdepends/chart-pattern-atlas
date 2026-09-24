@@ -502,18 +502,52 @@ function setActive(i){
   STATE[view].slug=p.slug;try{history.replaceState(null,"","#"+VIEWS[view].hashPrefix+p.slug)}catch(e){}
 }
 
+// Carousel scrolling is animated here rather than with the browser's smooth
+// scroll. Rapid input (fast wheel, held keys) just moves the target and the
+// animation chases it at a speed proportional to the distance, so the track
+// never falls behind. The highlighted slide and description are driven by
+// what is actually centred on screen, so text and tiles always stay in sync.
+const anim={raf:0,target:0,idx:-1,last:0};
+function navBase(){return anim.raf?anim.idx:current}
+function slideLeft(i){
+  const s=document.querySelector(`.slide[data-i="${i}"]`),t=$("#track");
+  return s?Math.max(0,Math.min(t.scrollWidth-t.clientWidth,s.offsetLeft-(t.clientWidth-s.offsetWidth)/2)):null;
+}
+function cancelAnim(){
+  if(!anim.raf) return;
+  cancelAnimationFrame(anim.raf);anim.raf=0;
+  const t=$("#track");t.style.scrollSnapType="";t.style.scrollBehavior="";
+}
 function go(i,instant){
   i=Math.max(0,Math.min(visible.length-1,i));
-  const s=document.querySelector(`.slide[data-i="${i}"]`); if(!s) return;
-  const track=$("#track");
-  const left=s.offsetLeft-(track.clientWidth-s.offsetWidth)/2;
-  lockUntil=performance.now()+(instant?80:650);
-  track.scrollTo({left,behavior:instant?"auto":"smooth"});
-  setActive(i);
+  const left=slideLeft(i); if(left==null) return;
+  const t=$("#track");
+  if(instant||matchMedia("(prefers-reduced-motion: reduce)").matches){
+    cancelAnim();t.scrollLeft=left;setActive(i);return;
+  }
+  anim.target=left;anim.idx=i;
+  if(anim.raf) return;
+  t.style.scrollSnapType="none";t.style.scrollBehavior="auto";
+  anim.pos=t.scrollLeft;anim.last=performance.now();
+  const tick=now=>{
+    const dt=Math.min(64,now-anim.last);anim.last=now;
+    const d=anim.target-anim.pos;
+    if(Math.abs(d)<0.75){
+      t.scrollLeft=anim.target;anim.raf=0;
+      t.style.scrollSnapType="";t.style.scrollBehavior="";
+      const k=anim.idx;current=-1;setActive(k);return;
+    }
+    // Exponential ease: covers ~90% of the remaining distance every 120 ms.
+    anim.pos+=d*(1-Math.exp(-dt/52));
+    t.scrollLeft=anim.pos;
+    anim.raf=requestAnimationFrame(tick);
+  };
+  anim.raf=requestAnimationFrame(tick);
 }
 
 // Pick the slide nearest the centre while the user scrolls or swipes.
 let raf=0,lockUntil=0;
+["pointerdown","touchstart"].forEach(ev=>$("#track").addEventListener(ev,cancelAnim,{passive:true}));
 $("#track").addEventListener("scroll",()=>{
   if(performance.now()<lockUntil) return;
   cancelAnimationFrame(raf);
@@ -559,14 +593,14 @@ const GLIDE_SLIDES_PER_SEC=6;
 function startHold(dir,src){
   stopHold(true);
   hold.dir=dir;hold.src=src;
-  go(current+dir);
+  go(navBase()+dir);
   hold.delayT=setTimeout(beginGlide,380);
 }
 function beginGlide(){
   if(!hold.dir) return;
   const t=$("#track"),a=t.querySelector('.slide[data-i="0"]'),b=t.querySelector('.slide[data-i="1"]');
   const stride=a&&b?b.offsetLeft-a.offsetLeft:t.clientWidth*.6;
-  hold.gliding=true;lockUntil=0;
+  cancelAnim();hold.gliding=true;lockUntil=0;
   t.style.scrollSnapType="none";t.style.scrollBehavior="auto";
   hold.last=performance.now();
   const tick=now=>{
@@ -602,7 +636,7 @@ function bindArrow(btn,dir){
   ["pointerup","pointercancel","lostpointercapture"].forEach(t=>btn.addEventListener(t,()=>{if(hold.src==="pointer")stopHold()}));
   btn.addEventListener("contextmenu",e=>e.preventDefault());
   // Keyboard activation (Enter/Space on a focused button) arrives as a click with detail 0.
-  btn.addEventListener("click",e=>{if(e.detail===0)go(current+dir)});
+  btn.addEventListener("click",e=>{if(e.detail===0)go(navBase()+dir)});
 }
 bindArrow($("#prev"),-1);
 bindArrow($("#next"),1);
@@ -619,8 +653,8 @@ window.addEventListener("wheel",e=>{
   clearTimeout(wheelIdle); wheelIdle=setTimeout(()=>{wheelAcc=0},220);
   wheelAcc+=d;
   const now=performance.now();
-  if(Math.abs(wheelAcc)>=50&&now-wheelLast>=110){
-    go(current+(wheelAcc>0?1:-1));
+  if(Math.abs(wheelAcc)>=50&&now-wheelLast>=70){
+    go(navBase()+(wheelAcc>0?1:-1));
     wheelAcc=0; wheelLast=now;
   }
 },{passive:false});
